@@ -38,6 +38,12 @@ function verifyTelegramInitData(initData) {
 // Auth middleware
 async function authMiddleware(req, res, next) {
   const initData = req.header('X-Telegram-Init-Data');
+  // DEBUG
+  console.log('=== AUTH ATTEMPT ===');
+  console.log('initData length:', initData ? initData.length : 0);
+  console.log('initData preview:', initData ? initData.slice(0, 100) : 'EMPTY');
+  console.log('BOT_TOKEN set:', !!process.env.BOT_TOKEN);
+  console.log('BOT_TOKEN length:', process.env.BOT_TOKEN?.length);
   const tgUser = verifyTelegramInitData(initData);
 
   if (!tgUser) {
