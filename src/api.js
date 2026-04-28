@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { supabase } from './db.js';
-import { updateStatsOnComplete } from './streak.js';
+import { updateStatsOnComplete, incrementCaptured } from './streak.js';
+import { parseTask } from './claude.js';
 
 export const apiRouter = Router();
 
@@ -158,6 +159,45 @@ apiRouter.post('/tasks/:id/complete', authMiddleware, async (req, res) => {
 
   const newStats = await updateStatsOnComplete(req.user.id);
   res.json({ task, stats: newStats });
+});
+
+// POST /api/tasks — capture a new task from Mini App
+apiRouter.post('/tasks', authMiddleware, async (req, res) => {
+  const rawText = req.body?.raw_text?.trim();
+  if (!rawText) return res.status(400).json({ error: 'raw_text required' });
+
+  let parsed;
+  try {
+    parsed = await parseTask(rawText);
+  } catch (e) {
+    console.error('parseTask error:', e);
+    parsed = { title: rawText.slice(0, 50), location_tag: null, estimated_minutes: 15, urgency: 5 };
+  }
+
+  const { data: task, error } = await supabase
+    .from('tasks')
+    .insert({
+      user_id: req.user.id,
+      raw_text: rawText,
+      title: parsed.title,
+      location_tag: parsed.location_tag,
+      estimated_minutes: parsed.estimated_minutes,
+      urgency: parsed.urgency,
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  await supabase.from('activity_log').insert({
+    user_id: req.user.id,
+    task_id: task.id,
+    action: 'captured',
+  });
+
+  await incrementCaptured(req.user.id);
+  res.json({ task });
 });
 
 // POST /api/tasks/:id/skip — push to back of queue, don't complete
