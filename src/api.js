@@ -114,6 +114,28 @@ apiRouter.get('/tasks', authMiddleware, async (req, res) => {
   });
 });
 
+// GET /api/tasks/completed?range=today|all
+apiRouter.get('/tasks/completed', authMiddleware, async (req, res) => {
+  const range = req.query.range || 'today';
+
+  let query = supabase
+    .from('tasks')
+    .select('id, title, location_tag, estimated_minutes, urgency, completed_at, created_at')
+    .eq('user_id', req.user.id)
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false });
+
+  if (range === 'today') {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    query = query.gte('completed_at', todayStart.toISOString());
+  }
+
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ tasks: data || [] });
+});
+
 // POST /api/tasks/:id/complete
 apiRouter.post('/tasks/:id/complete', authMiddleware, async (req, res) => {
   const taskId = Number(req.params.id);
